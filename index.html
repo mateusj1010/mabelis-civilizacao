@@ -241,11 +241,12 @@ html,body{width:100%;height:100%;overflow:hidden}body{background:#a6a6a6}
 </style><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="MABELIS"><meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#353a40"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icone-app.png">
 <style id="mabelis-sky-v19">
 /* v1.9 — céu dessaturado com nuvens suaves; somente alteração de cenário */
-html,body{background:#8494a2 url("ceu-mabelis.webp") center center/cover fixed no-repeat!important;}
-body{position:relative;isolation:isolate;}
-body::before,body::after{content:"";position:fixed;inset:-12vh -25vw;pointer-events:none;z-index:-1;background-repeat:repeat-x;background-position:center;background-size:auto 105%;opacity:.68;will-change:transform;}
-body::before{background-image:url("nuvens-lentas-1.png");animation:mabelis-clouds-near 115s linear infinite;}
-body::after{background-image:url("nuvens-lentas-2.png");background-size:auto 120%;opacity:.48;animation:mabelis-clouds-far 180s linear infinite reverse;}
+html{background:#8494a2;}
+body{position:relative;isolation:isolate;background:#8494a2 url("ceu-mabelis.webp?v=20") center center/cover fixed no-repeat!important;}
+body::before,body::after{content:"";position:fixed;inset:-12vh -25vw;pointer-events:none;z-index:0;background-repeat:repeat-x;background-position:center;background-size:auto 105%;opacity:.68;will-change:transform;}
+body::before{background-image:url("nuvens-lentas-1.png?v=20");animation:mabelis-clouds-near 115s linear infinite;}
+body::after{background-image:url("nuvens-lentas-2.png?v=20");background-size:auto 120%;opacity:.48;animation:mabelis-clouds-far 180s linear infinite reverse;}
+ .top,.layout{position:relative;z-index:1;}
 @keyframes mabelis-clouds-near{from{transform:translate3d(-5vw,0,0)}to{transform:translate3d(20vw,0,0)}}
 @keyframes mabelis-clouds-far{from{transform:translate3d(-12vw,0,0)}to{transform:translate3d(15vw,0,0)}}
 @media (prefers-reduced-motion:reduce){body::before,body::after{animation:none}}
