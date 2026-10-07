@@ -287,21 +287,32 @@ body{position:relative;isolation:auto;}
 
 
 <style id="mabelis-residential-test">
-/* RESIDÊNCIAS — um conjunto por estágio, calculado pelos níveis reais */
+/* RESIDÊNCIAS — 12 repetições; cada imagem = 2/3 da largura das construções de nível */
 .civ-residence{
   position:absolute;
-  left:50%;
-  top:54%;
-  width:46%;
+  width:6.87%;
   height:auto;
   object-fit:contain;
   transform:translate(-50%,-100%);
   transform-origin:center bottom;
-  z-index:6;
+  z-index:3;
   pointer-events:none;
   user-select:none;
-  filter:drop-shadow(0 3px 3px #0003);
+  filter:drop-shadow(0 2px 2px #0003);
 }
+/* 12 pontos residenciais distribuídos pela área útil da ilha */
+.civ-residence.r1{left:39%;top:20%;z-index:2}
+.civ-residence.r2{left:47%;top:18%;z-index:2}
+.civ-residence.r3{left:55%;top:20%;z-index:2}
+.civ-residence.r4{left:43%;top:29%;z-index:2}
+.civ-residence.r5{left:52%;top:29%;z-index:2}
+.civ-residence.r6{left:61%;top:28%;z-index:2}
+.civ-residence.r7{left:40%;top:39%;z-index:3}
+.civ-residence.r8{left:49%;top:40%;z-index:3}
+.civ-residence.r9{left:59%;top:39%;z-index:3}
+.civ-residence.r10{left:45%;top:50%;z-index:4}
+.civ-residence.r11{left:54%;top:51%;z-index:4}
+.civ-residence.r12{left:63%;top:48%;z-index:4}
 .residential-stage-controls{
   position:absolute;left:50%;top:8%;transform:translateX(-50%);z-index:9;
   display:flex;align-items:center;gap:4px;padding:3px 6px;
@@ -316,7 +327,7 @@ body{position:relative;isolation:auto;}
   border-radius:7px;padding:3px 7px;font:700 9px Georgia,serif;
 }
 @media(max-width:950px) and (orientation:landscape){
-  .civ-residence{width:42%}
+  .civ-residence{width:6.47%}
   .residential-test-info{font-size:8px;padding:2px 5px}
 }
 </style>
@@ -339,8 +350,9 @@ function renderCivilizations(){
  const avg=(player.a.Tecnologia+player.a.Armamento+player.a.Sabedoria+player.a.Economia)/4;
  const automaticResidentialStage=avg<3?1:avg<6?2:avg<9?3:4;
  const residentialStage=residentialTestStage??automaticResidentialStage;
- const residentialAsset='MABELIS_RESIDENCIAS/residencial-'+String(residentialStage).padStart(2,'0')+'.png?v=3';
- const residences='<img class="civ-residence" data-stage="'+residentialStage+'" src="'+residentialAsset+'" alt="Residencial '+residentialStage+'" onerror="residentialLoadError(this)">';
+ const residentialAsset='MABELIS_RESIDENCIAS/residencial-'+String(residentialStage).padStart(2,'0')+'.png?v=4';
+ // As 12 residências evoluem juntas conforme a média dos quatro atributos.
+ const residences=Array.from({length:12},(_,i)=>'<img class="civ-residence r'+(i+1)+'" data-stage="'+residentialStage+'" src="'+residentialAsset+'" alt="Residencial '+residentialStage+'" onerror="residentialLoadError(this)">').join('');
  const residentialControls='<div class="residential-stage-controls">Residencial teste: <button onclick="setResidentialTest(1)">1</button><button onclick="setResidentialTest(2)">2</button><button onclick="setResidentialTest(3)">3</button><button onclick="setResidentialTest(4)">4</button><button onclick="clearResidentialTest()">AUTO</button></div>';
 
  const controls=pos.map(a=>'<div class="civ-control">'+a+'<div class="ctrl-row"><button onclick="setCivTest(\''+a+'\',-1)">−</button><b>'+civTestStages[a]+'</b><button onclick="setCivTest(\''+a+'\',1)">+</button></div></div>').join('');
