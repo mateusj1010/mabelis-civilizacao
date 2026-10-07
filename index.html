@@ -287,10 +287,12 @@ body{position:relative;isolation:auto;}
 
 
 <style id="mabelis-residential-test">
-/* TESTE RESIDENCIAL — posições independentes para ajuste visual */
+/* RESIDÊNCIAS — um conjunto por estágio, calculado pelos níveis reais */
 .civ-residence{
   position:absolute;
-  width:7.2%;
+  left:51%;
+  top:43%;
+  width:31%;
   height:auto;
   object-fit:contain;
   transform:translate(-50%,-100%);
@@ -300,23 +302,13 @@ body{position:relative;isolation:auto;}
   user-select:none;
   filter:drop-shadow(0 3px 3px #0003);
 }
-/* Pontos residenciais: altere left/top para ajustar manualmente */
-.civ-residence.r1{left:42%;top:25%;z-index:2}
-.civ-residence.r2{left:51%;top:29%;z-index:2}
-.civ-residence.r3{left:59%;top:27%;z-index:2}
-.civ-residence.r4{left:43%;top:39%;z-index:3}
-.civ-residence.r5{left:53%;top:43%;z-index:3}
-.civ-residence.r6{left:63%;top:38%;z-index:3}
-.civ-residence.r7{left:45%;top:52%;z-index:4}
-.civ-residence.r8{left:58%;top:54%;z-index:4}
-
 .residential-test-info{
   position:absolute;right:6px;top:6px;z-index:8;
   color:#fff4df;background:#20262dcc;border:1px solid #aaa08a;
   border-radius:7px;padding:3px 7px;font:700 9px Georgia,serif;
 }
 @media(max-width:950px) and (orientation:landscape){
-  .civ-residence{width:6.8%}
+  .civ-residence{width:29%}
   .residential-test-info{font-size:8px;padding:2px 5px}
 }
 </style>
@@ -330,12 +322,12 @@ function renderCivilizations(){
  const pos=['Sabedoria','Tecnologia','Economia','Armamento'];
  const imgs=pos.map(a=>civTestStages[a]>0?'<img class="civ-building '+a.toLowerCase()+'" src="'+civAsset(a,civTestStages[a])+'" alt="'+a+' estágio '+civTestStages[a]+'">':'').join('');
 
- // Residências: estágio calculado pela média dos quatro aspectos.
- // Durante este teste, a média usa os controles visuais dos aspectos.
- const avg=(civTestStages.Tecnologia+civTestStages.Armamento+civTestStages.Sabedoria+civTestStages.Economia)/4;
+ // Residências: estágio calculado pela média REAL dos quatro atributos (0–12).
+ const player=p();
+ const avg=(player.a.Tecnologia+player.a.Armamento+player.a.Sabedoria+player.a.Economia)/4;
  const residentialStage=avg<3?1:avg<6?2:avg<9?3:4;
  const residentialAsset='MABELIS_RESIDENCIAS/residencial-'+String(residentialStage).padStart(2,'0')+'.png';
- const residences=Array.from({length:8},(_,i)=>'<img class="civ-residence r'+(i+1)+'" src="'+residentialAsset+'" alt="Residência estágio '+residentialStage+'">').join('');
+ const residences='<img class="civ-residence" src="'+residentialAsset+'" alt="">';
 
  const controls=pos.map(a=>'<div class="civ-control">'+a+'<div class="ctrl-row"><button onclick="setCivTest(\''+a+'\',-1)">−</button><b>'+civTestStages[a]+'</b><button onclick="setCivTest(\''+a+'\',1)">+</button></div></div>').join('');
  el.innerHTML='<div class="civ-test"><div class="civ-test-label">TESTE VISUAL DA CIVILIZAÇÃO</div><div class="civ-stage"><img class="civ-island" src="ilha_flutuante.png" alt="Ilha flutuante">'+residences+imgs+'<div class="residential-test-info">Média '+avg.toFixed(2)+' · Residencial '+residentialStage+'</div></div><div class="civ-test-controls">'+controls+'</div></div>';
