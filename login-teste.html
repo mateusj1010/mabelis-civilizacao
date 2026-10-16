@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MABELIS — Teste de Login Google</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:radial-gradient(circle at top,#394c61,#17202b 65%);font:16px system-ui,-apple-system,Segoe UI,sans-serif;color:#f5f0e6;display:grid;place-items:center;padding:20px}main{width:min(100%,460px);background:#263341;border:1px solid #71808a;border-radius:18px;padding:26px;box-shadow:0 16px 50px #0007}h1{text-align:center;color:#edcb85;letter-spacing:.07em;margin:0 0 6px}h2{text-align:center;font-size:15px;font-weight:400;color:#c6cdd1;margin:0 0 24px}button{border:0;border-radius:9px;padding:13px 16px;background:#e4c482;color:#18232d;font-weight:700;cursor:pointer;width:100%;font-size:15px}button:disabled{opacity:.5;cursor:wait}.secondary{margin-top:10px;background:#475869;color:white}.hidden{display:none}p{line-height:1.45}.meta{background:#17232e;padding:13px;border-radius:10px;overflow-wrap:anywhere}code{color:#ffe0a2;font-size:13px}.small{font-size:12px;color:#b9c3ca}#error{color:#ffc2b6;white-space:pre-wrap}#status{color:#d3dfeb}#uid{user-select:all}
+</style>
+</head>
+<body>
+<main>
+<h1>MABELIS</h1><h2>CIVILIZAÇÃO — TESTE DE LOGIN</h2>
+<p id="status">Carregando autenticação…</p>
+<button id="login" disabled>Entrar com Google</button>
+<section id="details" class="hidden">
+<p>Conta autenticada:</p>
+<div class="meta"><div id="name"></div><div id="email"></div><p><strong>UID do Firebase</strong></p><code id="uid"></code></div>
+<button id="copy" class="secondary">Copiar UID</button>
+<button id="logout" class="secondary">Sair</button>
+</section>
+<p id="error" role="alert"></p>
+<p class="small">Página temporária de teste. Não altera o jogo, não concede permissão de administrador e não grava dados no Firestore.</p>
+</main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+const firebaseConfig={apiKey:'AIzaSyABVeSs1KA16YXDsqhTJpJwyWF-K0NKeY',authDomain:'mabelis-civilizacao.firebaseapp.com',projectId:'mabelis-civilizacao',storageBucket:'mabelis-civilizacao.firebasestorage.app',messagingSenderId:'1077152274878',appId:'1:1077152274878:web:5277faf0224490d4fcc1ef'};
+const $=id=>document.getElementById(id);
+try{
+ const app=initializeApp(firebaseConfig);const auth=getAuth(app);const provider=new GoogleAuthProvider();
+ $('login').disabled=false;
+ onAuthStateChanged(auth,user=>{
+  $('login').classList.toggle('hidden',!!user);$('details').classList.toggle('hidden',!user);
+  $('status').textContent=user?'Login realizado com sucesso.':'Entre com sua conta Google para registrar seu usuário.';
+  if(user){$('name').textContent=user.displayName||'Usuário Google';$('email').textContent=user.email||'';$('uid').textContent=user.uid;}
+ });
+ getRedirectResult(auth).catch(e=>{$('error').textContent='Erro ao concluir login: '+e.code+' — '+e.message});
+ $('login').addEventListener('click',async()=>{
+  $('error').textContent='';$('login').disabled=true;
+  try{await signInWithPopup(auth,provider)}catch(e){
+   if(e.code==='auth/popup-blocked'||e.code==='auth/operation-not-supported-in-this-environment'){
+    try{await signInWithRedirect(auth,provider);return}catch(e2){e=e2;}
+   }
+   if(e.code!=='auth/popup-closed-by-user'&&e.code!=='auth/cancelled-popup-request')$('error').textContent='Não foi possível entrar: '+e.code+' — '+e.message;
+  }finally{$('login').disabled=false;}
+ });
+ $('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('uid').textContent);$('copy').textContent='UID copiado!';}catch(e){$('copy').textContent='Selecione o UID acima e copie';}});
+ $('logout').addEventListener('click',()=>signOut(auth));
+}catch(e){$('status').textContent='Erro ao iniciar Firebase';$('error').textContent=e.message;}
+</script>
+</body></html>
