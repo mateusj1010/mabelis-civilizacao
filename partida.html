@@ -1,0 +1,45 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>MABELIS — Partida online</title><style>
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;padding:18px;background:linear-gradient(135deg,#394e5e,#172734);color:#f7f2e8;font:15px system-ui,sans-serif}main{max-width:760px;margin:auto}h1{text-align:center;letter-spacing:.13em;color:#e8cc8b}h2{font:700 22px Georgia,serif;color:#f2d79c}.panel{background:#283d4e;border:1px solid #8593a0;border-radius:14px;padding:18px;margin:14px 0}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.tag{display:inline-block;border:1px solid #d8c390;border-radius:8px;padding:7px 12px;color:#f5dc9c}li{padding:9px 0;border-bottom:1px solid #506475}.current{color:#f6d586;font-weight:800}button,a.button{display:inline-block;background:#e6c987;border:0;border-radius:8px;padding:11px 16px;color:#1d2d3c;text-decoration:none;font-weight:700;cursor:pointer}#notice{color:#f5d7a4;white-space:pre-wrap}.hidden{display:none!important}.muted{color:#cad4da;font-size:13px}
+</style></head><body><main><h1>MABELIS CIVILIZAÇÃO</h1><p style="text-align:center">PARTIDA ONLINE · ETAPA 5B</p><div class="panel"><p id="identity">Conferindo sua conta Google...</p><div class="row"><a class="button" href="salas.html">Voltar às salas</a><button id="login" class="hidden">Entrar com Google</button></div></div><p id="notice" role="status"></p><section id="game" class="hidden"><div class="panel"><h2>Partida conectada</h2><div class="row"><span class="tag" id="code"></span><span class="tag" id="round"></span></div><p id="turn"></p><p id="role"></p></div><div class="panel"><h2>Civilizações participantes</h2><ol id="members"></ol></div><p class="muted">Esta tela acompanha os dados reais da sala no Firestore. Ainda não executa jogadas nem altera moedas, cartas ou atributos. A sincronização das regras do jogo será implementada na próxima etapa.</p></section></main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {getFirestore,doc,onSnapshot} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+const app=initializeApp({apiKey:'AIzaSyABVeSs1KA16YXDsqhTJpJavyWF-K0NKeY',authDomain:'mabelis-civilizacao.firebaseapp.com',projectId:'mabelis-civilizacao',storageBucket:'mabelis-civilizacao.firebasestorage.app',messagingSenderId:'1077152274878',appId:'1:1077152274878:web:5277faf0224490d4fcc1ef'}),auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
+const ADMIN_UID='f14sjW0rsHU0avm3m7LPYfAIIRF3';
+const code=new URLSearchParams(location.search).get('sala');
+let stopRoom=null,stopPlayer=null,allowed=false,account=null;
+function notice(t){$('notice').textContent=t}
+function disconnect(t){if(stopRoom){stopRoom();stopRoom=null}$('game').classList.add('hidden');if(t)notice(t)}
+function watch(u){if(stopPlayer){stopPlayer();stopPlayer=null}disconnect();allowed=false;
+ stopPlayer=onSnapshot(doc(db,'players',u.uid),p=>{
+  const ok=u.uid===ADMIN_UID||(p.exists()&&p.data().status==='approved');
+  if(!ok){allowed=false;disconnect('Seu acesso não está aprovado ou foi bloqueado.');return}
+  if(allowed)return;allowed=true;
+  stopRoom=onSnapshot(doc(db,'rooms',code),r=>{
+   if(!r.exists()){disconnect('A sala foi encerrada.');return}
+   const d=r.data();
+   if(!Object.prototype.hasOwnProperty.call(d.members||{},u.uid)){disconnect('Sua conta não pertence a esta sala.');return}
+   if(d.status!=='playing'){disconnect('A partida ainda não foi iniciada.');return}
+   $('game').classList.remove('hidden');notice('Dados sincronizados em tempo real.');
+   $('code').textContent='Sala '+code;$('round').textContent='Turno '+(d.turnNumber??1);
+   const turnName=d.members[d.turnUid]||'Jogador indisponível';
+   $('turn').textContent='Vez de: '+turnName;
+   $('role').textContent=d.turnUid===u.uid?'Você é o jogador da vez.':'Aguarde sua vez.';
+   $('members').replaceChildren();
+   for(const [uid,name] of Object.entries(d.members)){
+    const li=document.createElement('li');li.textContent=name+(uid===u.uid?' — você':'')+(uid===d.turnUid?' · VEZ ATUAL':'');
+    if(uid===d.turnUid)li.className='current';$('members').append(li)
+   }
+  },e=>disconnect('Não foi possível acompanhar a sala: '+e.message));
+ },e=>disconnect('Não foi possível verificar sua autorização: '+e.message));
+}
+onAuthStateChanged(auth,u=>{
+ account=u;if(stopPlayer){stopPlayer();stopPlayer=null}disconnect();
+ $('login').classList.toggle('hidden',!!u);$('identity').textContent=u?'Conectado: '+(u.displayName||u.email):'Faça login com a conta Google participante.';
+ if(!u){notice('Aguardando login.');return}
+ if(!code||!/^[A-HJ-NP-Z2-9]{8}$/.test(code)){notice('Código da sala inválido. Volte às salas.');return}
+ notice('Verificando autorização e participação...');watch(u)
+});
+$('login').onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){notice('Falha no login: '+e.message)}};
+</script></body></html>
