@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MABELIS — Solicitar acesso</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;background:linear-gradient(140deg,#394b5b,#1a2937);color:#f4f1e8;font:15px system-ui,Arial,sans-serif;padding:20px;display:grid;place-items:center}
+main{width:min(480px,100%);background:#263745;border:1px solid #85919c;border-radius:18px;padding:25px;box-shadow:0 12px 35px #0005}
+h1{text-align:center;color:#f4d38e;letter-spacing:3px;margin:4px 0}h2{text-align:center;font-size:13px;font-weight:400;letter-spacing:2px;margin:4px 0 25px}
+button{border:1px solid #ebd8aa;background:#e8cb8f;color:#1c2c39;font-weight:750;padding:13px;border-radius:9px;cursor:pointer;width:100%;margin:7px 0}
+button.secondary{background:#42566a;color:#fff}button:disabled{opacity:.5;cursor:wait}
+p{line-height:1.5}#status{border:1px solid #657b8d;background:#314759;border-radius:10px;padding:13px;overflow-wrap:anywhere;white-space:pre-line}
+.muted{color:#c0cbd5;font-size:13px}.hidden{display:none!important}a{color:#f4d38e}
+</style></head><body>
+<main>
+<h1>MABELIS</h1><h2>CIVILIZAÇÃO</h2>
+<p>Entre com Google para solicitar autorização para jogar.</p>
+<button id="signIn">Entrar com Google</button>
+<div id="profile" class="hidden"><p id="identity"></p><button id="request" class="hidden">Solicitar acesso ao jogo</button><button id="signOut" class="secondary">Sair da conta</button></div>
+<p id="status" role="status">Aguardando login.</p>
+<p class="muted">O administrador analisa os pedidos exclusivamente pelo painel MABELIS. Esta página não concede acesso automaticamente.</p>
+</main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {getFirestore,doc,getDoc,setDoc,onSnapshot,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+const app=initializeApp({
+ apiKey:'AIzaSyABVeSs1KA16YXDsqhTJpJavyWF-K0NKeY',
+ authDomain:'mabelis-civilizacao.firebaseapp.com',
+ projectId:'mabelis-civilizacao',
+ storageBucket:'mabelis-civilizacao.firebasestorage.app',
+ messagingSenderId:'1077152274878',
+ appId:'1:1077152274878:web:5277faf0224490d4fcc1ef'
+});
+const auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
+let user=null,unsub=null;
+const status=t=>$('status').textContent=t;
+function reset(){if(unsub){unsub();unsub=null}$('request').classList.add('hidden');$('request').disabled=false}
+onAuthStateChanged(auth,u=>{
+ reset();user=u;$('signIn').classList.toggle('hidden',!!u);$('profile').classList.toggle('hidden',!u);
+ if(!u){status('Aguardando login.');return}
+ $('identity').textContent='Conta: '+(u.displayName||'Jogador')+' ('+(u.email||'sem e-mail')+')';
+ if(!u.email){status('Esta conta Google não possui e-mail disponível para o cadastro.');return}
+ const ref=doc(db,'players',u.uid);
+ status('Consultando sua autorização...');
+ unsub=onSnapshot(ref,snap=>{
+  if(!snap.exists()){$('request').classList.remove('hidden');status('Você ainda não solicitou acesso. Clique no botão para enviar seu pedido ao administrador.');return}
+  $('request').classList.add('hidden');
+  const st=snap.data().status;
+  if(st==='pending')status('Solicitação enviada! Seu acesso está PENDENTE de aprovação pelo administrador.');
+  else if(st==='approved')status('Seu acesso está APROVADO! Você poderá jogar quando as salas multiplayer forem disponibilizadas.');
+  else if(st==='blocked')status('Seu acesso está BLOQUEADO ou foi recusado. Apenas o administrador pode reativá-lo.');
+  else status('Status desconhecido. Contate o administrador.');
+ },err=>{status('Erro ao consultar seu acesso: '+err.code+' — '+err.message)});
+});
+$('signIn').onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){status('Falha no login: '+e.code+' — '+e.message)}};
+$('signOut').onclick=async()=>{try{await signOut(auth)}catch(e){status('Erro ao sair: '+e.message)}};
+$('request').onclick=async()=>{
+ const u=user;if(!u||!u.email)return;
+ $('request').disabled=true;status('Enviando solicitação...');
+ try{
+  const ref=doc(db,'players',u.uid);
+  const old=await getDoc(ref);
+  if(old.exists()){status('Já existe um registro para sua conta. Aguarde a atualização.');return}
+  await setDoc(ref,{name:u.displayName||'Jogador',email:u.email,status:'pending',createdAt:serverTimestamp()});
+  status('Solicitação enviada! Aguarde a aprovação do administrador.');
+ }catch(e){status('Não foi possível enviar: '+e.code+' — '+e.message)}
+ finally{$('request').disabled=false}
+};
+</script></body></html>
