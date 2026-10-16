@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MABELIS — Administrador Spark</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;padding:20px;background:linear-gradient(140deg,#314557,#172531);color:#f2f0e9;font:15px system-ui,Arial,sans-serif}
+main{max-width:850px;margin:auto}h1{color:#f0d08b;letter-spacing:2px;text-align:center}h2{font-size:19px}p{line-height:1.5}
+.panel,.player{background:#283b4b;border:1px solid #71808b;border-radius:13px;padding:17px;margin:13px 0}
+button{border:1px solid #e8d7ac;background:#e8ca8a;color:#182734;font:700 14px system-ui;border-radius:8px;padding:11px;cursor:pointer}
+button.secondary{background:#40556a;color:#fff}button.danger{background:#873d40;color:#fff}
+button:disabled{opacity:.5;cursor:not-allowed}.row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}.hidden{display:none!important}
+.muted{color:#c0ced8}.player strong{display:block}.player small{display:block;color:#c5d0d7;margin:5px 0 12px;overflow-wrap:anywhere}
+.tabs button.active{background:#e8ca8a;color:#172531}.tabs button{background:#41596d;color:#fff}
+#msg{white-space:pre-wrap;overflow-wrap:anywhere;color:#f4d5a0}#identity{overflow-wrap:anywhere}
+</style></head>
+<body><main>
+<h1>MABELIS CIVILIZAÇÃO</h1><p style="text-align:center" class="muted">ADMINISTRADOR · Firebase Spark</p>
+<section class="panel">
+<h2>Identificação com Google</h2><p id="identity">Verificando autenticação...</p>
+<div class="row"><button id="google">Entrar com Google</button><button class="secondary hidden" id="logout">Sair</button></div>
+<p class="muted">Apenas a conta autorizada nas regras do Firestore poderá consultar e alterar os jogadores.</p>
+</section>
+<p id="msg" role="status"></p>
+<section id="dashboard" class="hidden">
+<div class="row"><button id="refresh" class="secondary">Atualizar</button><span id="totals" class="muted"></span></div>
+<div class="row tabs" style="margin-top:16px">
+<button data-tab="pending" class="active">Pendentes</button>
+<button data-tab="approved">Aprovados</button>
+<button data-tab="blocked">Bloqueados</button>
+</div>
+<div id="players"></div>
+</section>
+<p class="muted" style="font-size:12px">Versão Spark: não usa Cloud Functions nem senha adicional. A segurança depende do login Google e das regras publicadas no Firestore. Não modifica o jogo principal.</p>
+</main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import {getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {getFirestore,collection,onSnapshot,doc,updateDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+const firebaseConfig={
+ apiKey:'AIzaSyABVeSs1KA16YXDsqhTJpJavyWF-K0NKeY',
+ authDomain:'mabelis-civilizacao.firebaseapp.com',
+ projectId:'mabelis-civilizacao',
+ storageBucket:'mabelis-civilizacao.firebasestorage.app',
+ messagingSenderId:'1077152274878',
+ appId:'1:1077152274878:web:5277faf0224490d4fcc1ef'
+};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const $=id=>document.getElementById(id),say=t=>$('msg').textContent=t;
+let currentUser=null,stop=null,players=[],tab='pending';
+function closePanel(){if(stop){stop();stop=null}players=[];$('dashboard').classList.add('hidden');$('players').replaceChildren()}
+function listen(){
+ closePanel();say('Verificando permissões no Firestore...');
+ stop=onSnapshot(collection(db,'players'),snap=>{
+  players=snap.docs.map(d=>({uid:d.id,...d.data()}));
+  $('dashboard').classList.remove('hidden');say('Painel conectado. As alterações aparecem em tempo real.');render();
+ },err=>{closePanel();say('Acesso ao painel negado ou falha na conexão: '+err.message+'\nConfira se sua conta é a mesma autorizada nas regras do Firestore.')});
+}
+onAuthStateChanged(auth,u=>{
+ currentUser=u;closePanel();
+ $('identity').textContent=u?'Conectado: '+(u.displayName||u.email||u.uid):'Faça login com a conta Google administradora.';
+ $('google').classList.toggle('hidden',!!u);$('logout').classList.toggle('hidden',!u);
+ if(u)listen();else say('Aguardando login do administrador.');
+});
+$('google').onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){say('Falha no login Google: '+e.code+' — '+e.message)}};
+$('logout').onclick=async()=>{try{await signOut(auth)}catch(e){say(e.message)}};
+$('refresh').onclick=()=>{if(currentUser)listen()};
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
+ tab=b.dataset.tab;document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));render()
+});
+function render(){
+ $('players').replaceChildren();
+ $('totals').textContent=['pending','approved','blocked'].map(s=>({pending:'Pendentes',approved:'Aprovados',blocked:'Bloqueados'})[s]+': '+players.filter(p=>p.status===s).length).join(' · ');
+ const filtered=players.filter(p=>p.status===tab);
+ if(!filtered.length){const p=document.createElement('p');p.className='muted';p.textContent='Nenhum jogador nesta categoria.';$('players').append(p);return}
+ for(const p of filtered){
+  const box=document.createElement('article');box.className='player';
+  const name=document.createElement('strong');name.textContent=p.name||'Sem nome';
+  const email=document.createElement('small');email.textContent=p.email||p.uid;
+  box.append(name,email);
+  if(p.uid===currentUser?.uid){const own=document.createElement('span');own.textContent='Conta atual — sem opção de bloquear a si mesmo.';box.append(own)}
+  else {
+   const actions=tab==='pending'?[['Aprovar','approved'],['Recusar','blocked']]:tab==='approved'?[['Retirar acesso','blocked']]:[['Reativar','approved']];
+   for(const [label,status] of actions){
+    const btn=document.createElement('button');btn.textContent=label;btn.className=status==='blocked'?'danger':'secondary';btn.style.marginRight='8px';
+    btn.onclick=async()=>{
+     if(!confirm(label+' para '+(p.name||p.email||p.uid)+'?'))return;
+     btn.disabled=true;say('Atualizando acesso...');
+     try{await updateDoc(doc(db,'players',p.uid),{status,updatedAt:serverTimestamp()});say('Status atualizado com sucesso.')}
+     catch(e){say('Erro ao atualizar: '+e.code+' — '+e.message)}
+     finally{btn.disabled=false}
+    };
+    box.append(btn)
+   }
+  }
+  $('players').append(box)
+ }
+}
+</script></body></html>
