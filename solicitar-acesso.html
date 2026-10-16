@@ -31,9 +31,34 @@ const app=initializeApp({
  appId:'1:1077152274878:web:5277faf0224490d4fcc1ef'
 });
 const auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);
-let user=null,unsub=null;
+let user=null,unsub=null,lastStatus=null,lastSync=0,checkBusy=false;
 const status=t=>$('status').textContent=t;
-function reset(){if(unsub){unsub();unsub=null}$('request').classList.add('hidden');$('request').disabled=false}
+function reset(){if(unsub){unsub();unsub=null}lastStatus=null;lastSync=0;$('request').classList.add('hidden');$('request').disabled=false}
+function applyStatus(st){
+ lastStatus=st;lastSync=Date.now();
+ if(st===null){$('request').classList.remove('hidden');status('Você ainda não solicitou acesso. Clique no botão para enviar seu pedido ao administrador.');return}
+ $('request').classList.add('hidden');
+ if(st==='pending')status('Solicitação enviada! Seu acesso está PENDENTE de aprovação pelo administrador.');
+ else if(st==='approved')status('Seu acesso está APROVADO! Você poderá jogar quando as salas multiplayer forem disponibilizadas.');
+ else if(st==='blocked')status('Seu acesso está BLOQUEADO ou foi recusado. Apenas o administrador pode reativá-lo.');
+ else status('Status desconhecido. Contate o administrador.');
+}
+async function checkLatest(){
+ if(!user||checkBusy||document.hidden)return;
+ checkBusy=true;
+ try{
+  const {getDocFromServer}=await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+  const snapshot=await getDocFromServer(doc(db,'players',user.uid));
+  const st=snapshot.exists()?snapshot.data().status:null;
+  if(st!==lastStatus)applyStatus(st);
+  lastSync=Date.now();
+ }catch(e){
+  if(Date.now()-lastSync>90000)status('Sem conexão com o Firebase. Tentando atualizar automaticamente... ('+e.code+')');
+ }finally{checkBusy=false}
+}
+window.addEventListener('focus',checkLatest);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkLatest()});
+setInterval(checkLatest,15000);
 onAuthStateChanged(auth,u=>{
  reset();user=u;$('signIn').classList.toggle('hidden',!!u);$('profile').classList.toggle('hidden',!u);
  if(!u){status('Aguardando login.');return}
@@ -41,15 +66,11 @@ onAuthStateChanged(auth,u=>{
  if(!u.email){status('Esta conta Google não possui e-mail disponível para o cadastro.');return}
  const ref=doc(db,'players',u.uid);
  status('Consultando sua autorização...');
- unsub=onSnapshot(ref,snap=>{
-  if(!snap.exists()){$('request').classList.remove('hidden');status('Você ainda não solicitou acesso. Clique no botão para enviar seu pedido ao administrador.');return}
-  $('request').classList.add('hidden');
-  const st=snap.data().status;
-  if(st==='pending')status('Solicitação enviada! Seu acesso está PENDENTE de aprovação pelo administrador.');
-  else if(st==='approved')status('Seu acesso está APROVADO! Você poderá jogar quando as salas multiplayer forem disponibilizadas.');
-  else if(st==='blocked')status('Seu acesso está BLOQUEADO ou foi recusado. Apenas o administrador pode reativá-lo.');
-  else status('Status desconhecido. Contate o administrador.');
- },err=>{status('Erro ao consultar seu acesso: '+err.code+' — '+err.message)});
+ unsub=onSnapshot(ref,{includeMetadataChanges:true},snap=>{
+  const st=snap.exists()?snap.data().status:null;
+  if(st!==lastStatus||!snap.metadata.fromCache)applyStatus(st);
+ },err=>{status('Erro ao acompanhar seu acesso: '+err.code+' — '+err.message)});
+ checkLatest();
 });
 $('signIn').onclick=async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){status('Falha no login: '+e.code+' — '+e.message)}};
 $('signOut').onclick=async()=>{try{await signOut(auth)}catch(e){status('Erro ao sair: '+e.message)}};
