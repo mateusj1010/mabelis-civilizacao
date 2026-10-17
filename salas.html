@@ -4,7 +4,7 @@
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,getDoc,getDocFromServer,setDoc,runTransaction,onSnapshot,serverTimestamp,deleteDoc,collection} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getFirestore,doc,getDoc,getDocFromServer,setDoc,runTransaction,onSnapshot,serverTimestamp,deleteDoc,writeBatch,collection} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 const app=initializeApp({apiKey:'AIzaSyABVeSs1KA16YXDsqhTJpJavyWF-K0NKeY',authDomain:'mabelis-civilizacao.firebaseapp.com',projectId:'mabelis-civilizacao',storageBucket:'mabelis-civilizacao.firebasestorage.app',messagingSenderId:'1077152274878',appId:'1:1077152274878:web:5277faf0224490d4fcc1ef'});
 const auth=getAuth(app),db=getFirestore(app),$=id=>document.getElementById(id);let user=null,approved=false,roomId=null,roomData=null,stopPlayer=null,stopRoom=null,stopLinks=null,busy=false;
 const ADMIN_UID='f14sjW0rsHU0avm3m7LPYfAIIRF3';
@@ -38,31 +38,62 @@ async function exitRoom(code){
  busy=true;
  try{
   const rr=doc(db,'rooms',code),gr=doc(db,'casualGames',code),lr=roomLink(user.uid,code);
-  await runTransaction(db,async tx=>{
-   const rs=await tx.get(rr),gs=await tx.get(gr);
-   if(!rs.exists()||!Object.hasOwn(rs.data().members||{},user.uid)){tx.delete(lr);return}
-   const r=rs.data(),members={...r.members};delete members[user.uid];
-   const order=r.playerOrder||Object.keys(r.members).sort();
-   if(r.status==='finished'){tx.update(rr,{members,hostUid:r.hostUid===user.uid?(Object.keys(members)[0]||user.uid):r.hostUid});}
-   else if(r.status==='playing'&&gs.exists()){
+  const current=await getDocFromServer(rr);
+  // Sala encerrada ou excluída: apenas remove o atalho pessoal.
+  // Não modifica o histórico nem o estado final do jogo.
+  if(!current.exists()||current.data().status==='finished'||!Object.hasOwn(current.data().members||{},user.uid)){
+   await deleteDoc(lr);
+  }else if(current.data().status==='waiting'&&current.data().hostUid===user.uid){
+   await closeWaitingRoom(code);
+  }else{
+   await runTransaction(db,async tx=>{
+    const rs=await tx.get(rr),gs=await tx.get(gr);
+    if(!rs.exists()||!Object.hasOwn(rs.data().members||{},user.uid)){tx.delete(lr);return}
+    const r=rs.data();
+    if(r.status==='finished'){tx.delete(lr);return}
+    if(r.status==='waiting'){
+     // O criador usa a exclusão coletiva; participantes removem apenas a si mesmos.
+     if(r.hostUid===user.uid)throw Error('O criador deve encerrar a sala para todos.');
+     const members={...r.members};delete members[user.uid];
+     tx.update(rr,{members});tx.delete(lr);return;
+    }
+    if(r.status!=='playing'||!gs.exists())throw Error('A partida ainda não está disponível. Tente novamente.');
+    const members={...r.members};delete members[user.uid];
+    const order=r.playerOrder||Object.keys(r.members).sort();
     const g=gs.data(),state=structuredClone(g.state),i=order.indexOf(user.uid);
     if(i<0)throw Error('Jogador não encontrado na ordem da partida');
     state.inactive=Array.from(new Set([...(state.inactive||[]),i]));
     state.agreements=(state.agreements||[]).filter(a=>a.proposer!==i&&a.acceptor!==i);
     if(state.pendingAgreement&&(state.pendingAgreement.proposer===i||state.pendingAgreement.acceptor===i))state.pendingAgreement=null;
     let next=state.turn;
-    if(next===i){do{next=(next+1)%order.length}while(state.inactive.includes(next)&&next!==i);state.turn=next;state.phase='pre';state.rolls=0;state.kind='';state.remaining=0;state.attackedThisTurn=[];if(next!==i){const x=state.players[next];x.coins+=x.a.Economia<=5?1:x.a.Economia<=10?2:3}}
+    if(next===i){
+     do{next=(next+1)%order.length}while(state.inactive.includes(next)&&next!==i);
+     if(next!==i){state.turn=next;state.phase='pre';state.rolls=0;state.kind='';state.remaining=0;state.attackedThisTurn=[];
+      const x=state.players[next];x.coins+=x.a.Economia<=5?1:x.a.Economia<=10?2:3;
+     }
+    }
     const active=Object.keys(members).length;
-    if(active<2){state.winner=active===1?'Partida encerrada — jogadores insuficientes':'Partida encerrada';}
+    if(active<2)state.winner='Partida encerrada — jogadores insuficientes';
+    const newHost=r.hostUid===user.uid?(Object.keys(members)[0]||r.hostUid):r.hostUid;
     tx.update(gr,{state,revision:g.revision+1,turnUid:order[state.turn],updatedAt:serverTimestamp()});
-    tx.update(rr,{members,hostUid:r.hostUid===user.uid?(Object.keys(members)[0]||user.uid):r.hostUid,turnUid:order[state.turn],status:active<2?'finished':'playing'});
-   }else if(r.status==='waiting'){
-    if(!Object.keys(members).length){tx.delete(rr)}else{tx.update(rr,{members,hostUid:r.hostUid===user.uid?Object.keys(members)[0]:r.hostUid})}
-   }else{tx.update(rr,{members})}
-   tx.delete(lr);
-  });
-  if(roomId===code)clearRoom();updateMenu();message('Você saiu definitivamente da sala '+code+'.');
+    tx.update(rr,{members,hostUid:newHost,turnUid:order[state.turn],status:active<2?'finished':'playing'});
+    tx.delete(lr);
+   });
+  }
+  if(roomId===code)clearRoom();updateMenu();message('A sala '+code+' foi removida da sua lista.');
  }catch(e){message('Não foi possível sair: '+e.message)}finally{busy=false}
+}
+// O criador exclui a sala de espera e os atalhos de TODOS os participantes
+// em uma única operação atômica, evitando salas órfãs no menu.
+async function closeWaitingRoom(code){
+ const rr=doc(db,'rooms',code),snap=await getDocFromServer(rr);
+ if(!snap.exists())return;
+ const r=snap.data();
+ if(r.status!=='waiting'||r.hostUid!==user.uid)throw Error('Apenas o criador pode encerrar uma sala ainda não iniciada.');
+ const batch=writeBatch(db);
+ for(const uid of Object.keys(r.members||{}))batch.delete(roomLink(uid,code));
+ batch.delete(rr);
+ await batch.commit();
 }
 $('back').onclick=()=>{clearRoom();updateMenu();message('Menu principal.')};
 function randomCode(){const bytes=new Uint8Array(8);crypto.getRandomValues(bytes);const abc='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';return [...bytes].map(x=>abc[x%abc.length]).join('')}
@@ -93,5 +124,5 @@ $('startGame').onclick=async()=>{
  finally{busy=false;$('startGame').disabled=false}
 };
 $('openGame').onclick=()=>{if(roomId&&roomData?.status==='playing')window.top.location.href='index.html?sala='+encodeURIComponent(roomId)};
-$('close').onclick=async()=>{if(!roomId||roomData?.hostUid!==user?.uid||busy||!confirm('Encerrar esta sala para todos?'))return;busy=true;try{await deleteDoc(doc(db,'rooms',roomId));clearRoom();updateMenu();message('Sala encerrada.')}catch(e){message('Erro ao encerrar: '+e.message)}finally{busy=false}};
+$('close').onclick=async()=>{if(!roomId||roomData?.hostUid!==user?.uid||busy||!confirm('Encerrar esta sala para todos? Ela desaparecerá da lista de todos os participantes.'))return;busy=true;try{await closeWaitingRoom(roomId);clearRoom();updateMenu();message('Sala encerrada e removida da lista de todos os participantes.')}catch(e){message('Erro ao encerrar: '+e.message)}finally{busy=false}};
 </script></body></html>
