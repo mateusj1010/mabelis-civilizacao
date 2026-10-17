@@ -515,4 +515,43 @@ function claim(id){let x=p(),o=raw[id];if(x.done.includes(id)||x.coins<o[3]||!Ob
 window.mabelisSetState=function(next,revision){S=next;render();if(window.MABELIS_ONLINE)window.MABELIS_ONLINE.afterRemote?.(revision)};
 window.mabelisNewState=function(names){let pool=shuffle(raw.map((o,i)=>i));let players=names.map(name=>{let i=pool.pop(),j=pool.findIndex(k=>raw[k][1]!==raw[i][1]);let k=pool.splice(j,1)[0];return {name,coins:3,a:{Tecnologia:0,Armamento:0,Sabedoria:0,Economia:0},hand:[],obj:[i,k],done:[],shield:false,dom:false,trade:false}});let state={players,turn:0,round:1,rolls:0,phase:'pre',remaining:0,kind:'',deck:shuffle(defs.flatMap((d,i)=>Array(d[1]).fill(i))),discard:[],log:[],winner:null,agreements:[],attackedThisTurn:[]};players.forEach(x=>x.hand.push(state.deck.pop()));return state};
 window.mabelisCurrentState=()=>S;
+
+// Modo de observação: a interface mostra a civilização do usuário sem mudar o turno real.
+window.mabelisSpectatorMode=false;
+window.mabelisViewerIndex=-1;
+window.mabelisSpectatorRefresh=function(){
+ if(!S||!window.MABELIS_ONLINE)return;
+ const i=window.mabelisViewerIndex;
+ if(!window.mabelisSpectatorMode||i<0||i>=S.players.length){render();return}
+ const realTurn=S.turn;
+ try{S.turn=i;render()}finally{S.turn=realTurn}
+ $('who').textContent='👤 '+S.players[i].name+' · Aguardando '+S.players[realTurn].name;
+ $('status').innerHTML='<b>⏳ Vez de '+esc(S.players[realTurn].name)+'</b><p class="muted">Você pode consultar suas cartas, objetivos, regras, adversários e acordos. As ações ficam disponíveis no seu turno.</p>';
+ $('roll').disabled=true;$('end').disabled=true;
+ $('resumeShop').classList.add('hidden');$('shop').innerHTML='';
+};
+function mabelisInspect(action){
+ const i=window.mabelisViewerIndex;
+ if(!S||i<0||i>=S.players.length)return;
+ const real=S.turn;
+ try{S.turn=i;action()}finally{S.turn=real}
+ // Esconde os botões de ação dos diálogos no modo de observação.
+ $('mb').querySelectorAll('button').forEach(b=>{if(!/^(Fechar|Voltar)$/i.test(b.textContent.trim()))b.disabled=true});
+}
+document.addEventListener('click',function(e){
+ if(!window.MABELIS_ONLINE||!window.mabelisSpectatorMode||!S)return;
+ const btn=e.target.closest('button');
+ if(!btn)return;
+ // Bloqueia toda alteração, inclusive ações em modais, antes dos onclick existentes.
+ e.preventDefault();e.stopImmediatePropagation();
+ const action=btn.getAttribute('onclick')||'';
+ if(/^showCard\((\d+)\)$/.test(action)){
+   const index=Number(action.match(/\d+/)[0]);mabelisInspect(()=>showCard(index));return;
+ }
+ if(action==='objectives()'){mabelisInspect(()=>objectives());return}
+ if(action==='opponents()'){mabelisInspect(()=>opponents());return}
+ if(action==='rules()'){rules();return}
+ if(action==='closeModal()'){closeModal();return}
+ // As demais ações só podem ser executadas pelo jogador da vez.
+},true);
 </script><script type="module" src="casual-online.mjs"></script></body></html>
