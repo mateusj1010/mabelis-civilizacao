@@ -1,0 +1,25 @@
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import {getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {getFirestore,doc,getDoc,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+const cfg={apiKey:'AIzaSyABVeSs1KA16YXDsqhTJpJavyWF-K0NKeY',authDomain:'mabelis-civilizacao.firebaseapp.com',projectId:'mabelis-civilizacao',storageBucket:'mabelis-civilizacao.firebasestorage.app',messagingSenderId:'1077152274878',appId:'1:1077152274878:web:5277faf0224490d4fcc1ef'};
+const roomId=new URLSearchParams(location.search).get('sala');
+if(roomId){
+ const app=initializeApp(cfg,'mabelis-casual-board'),auth=getAuth(app),db=getFirestore(app);
+ const roomRef=doc(db,'rooms',roomId),gameRef=doc(db,'casualGames',roomId);
+ let user=null,room=null,remoteRev=-1,pending=false,applying=false,ready=false,localUidOrder=[],lastJSON='',stopGame=null,stopRoom=null,stopPlayer=null;
+ const curtain=document.createElement('div');curtain.id='online-curtain';curtain.style.cssText='position:fixed;inset:0;z-index:999998;background:#142533ee;color:white;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:18px system-ui';document.body.append(curtain);
+ const notice=t=>{curtain.textContent=t;curtain.style.display='flex'};
+ function lock(){if(!window.mabelisCurrentState?.()||!room)return true;return !ready||room.status!=='playing'||localUidOrder[window.mabelisCurrentState().turn]!==user?.uid}
+ function showLock(){if(!ready){notice('Conectando à partida...');return}if(lock()){notice('Aguardando sua vez. A partida será atualizada automaticamente.');return}curtain.style.display='none'}
+ function setState(state,rev){applying=true;try{state.agreements??=[];state.attackedThisTurn??=[];remoteRev=rev;lastJSON=JSON.stringify(state);window.mabelisSetState(state,rev);ready=true;showLock()}finally{applying=false}}
+ // Existing global `let S` is a global lexical binding, not window.S. Use a controlled bridge installed below.
+ window.MABELIS_ONLINE={afterRemote:rev=>{},save:state=>{if(applying||!ready||pending||!room||!user||localUidOrder[JSON.parse(lastJSON).turn]!==user.uid)return;const json=JSON.stringify(state);if(json===lastJSON)return;pending=true;runTransaction(db,async tx=>{const snap=await tx.get(gameRef);if(!snap.exists()||snap.data().revision!==remoteRev)throw Error('A partida mudou em outro aparelho.');if(snap.data().turnUid!==user.uid)throw Error('Não é seu turno.');tx.update(gameRef,{state:JSON.parse(json),revision:remoteRev+1,turnUid:localUidOrder[state.turn],updatedAt:serverTimestamp()})}).catch(e=>{notice('Jogada não sincronizada: '+e.message+' Atualize a página.');ready=false}).finally(()=>pending=false)},getRoom:()=>room};
+ // Bridge to the original script lexical S, using a small explicit global adapter.
+ const wait=async u=>{user=u;if(stopRoom)stopRoom();if(stopGame)stopGame();if(stopPlayer)stopPlayer();if(!u){notice('Entre com sua conta Google. Clique para fazer login.');curtain.onclick=()=>signInWithPopup(auth,new GoogleAuthProvider());return}
+  const player=await getDoc(doc(db,'players',u.uid));if(u.uid!=='f14sjW0rsHU0avm3m7LPYfAIIRF3'&&player.data()?.status!=='approved'){notice('Sua conta não está aprovada.');return}
+  stopPlayer=onSnapshot(doc(db,'players',u.uid),p=>{if(u.uid!=='f14sjW0rsHU0avm3m7LPYfAIIRF3'&&p.data()?.status!=='approved'){ready=false;notice('Acesso bloqueado.')}});
+  stopRoom=onSnapshot(roomRef,async snap=>{if(!snap.exists()){ready=false;notice('Sala encerrada.');return}room=snap.data();if(!room.members?.[u.uid]||room.status!=='playing'){ready=false;notice('Você não pertence a uma partida iniciada.');return}localUidOrder=Object.keys(room.members).sort();if(!stopGame){stopGame=onSnapshot(gameRef,snap=>{if(!snap.exists()){if(room.hostUid===u.uid){notice('Iniciando tabuleiro...');createGame().catch(e=>notice('Erro ao iniciar: '+e.message))}else notice('Aguardando o criador preparar o tabuleiro.');return}const d=snap.data();if(d.revision===remoteRev)return;setState(d.state,d.revision);},e=>notice('Erro na leitura: '+e.message))}showLock()},e=>notice('Erro na sala: '+e.message));
+ };
+ async function createGame(){await runTransaction(db,async tx=>{const r=await tx.get(roomRef),g=await tx.get(gameRef);if(g.exists())return;if(!r.exists()||r.data().hostUid!==user.uid||r.data().status!=='playing')throw Error('Sala inválida');const ids=Object.keys(r.data().members).sort();const names=ids.map(id=>r.data().members[id]);const state=window.mabelisNewState(names);tx.set(gameRef,{state,revision:0,turnUid:ids[0],hostUid:user.uid,createdAt:serverTimestamp()})})}
+ onAuthStateChanged(auth,u=>wait(u).catch(e=>notice('Falha na autenticação: '+e.message)));
+}
