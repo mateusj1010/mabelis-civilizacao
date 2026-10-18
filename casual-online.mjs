@@ -48,7 +48,16 @@ if(roomId){
  }
 
  function lock(){if(!window.mabelisCurrentState?.()||!room)return true;return !ready||room.status!=='playing'||localUidOrder[window.mabelisCurrentState().turn]!==user?.uid}
- function showLock(){if(!ready){notice('Conectando à partida...');return}if(agreementPrompt())return;if(lock()){notice('Aguardando sua vez. A partida será atualizada automaticamente.');return}curtain.style.display='none'}
+ function showLock(){
+  if(!ready){notice('Conectando à partida...');return}
+  const viewer=localUidOrder.indexOf(user?.uid);
+  const watching=lock();
+  window.mabelisViewerIndex=viewer;
+  window.mabelisSpectatorMode=watching;
+  if(agreementPrompt())return;
+  curtain.style.display='none';
+  window.mabelisSpectatorRefresh?.();
+ }
  function setState(state,rev){applying=true;try{state.agreements??=[];state.attackedThisTurn??=[];remoteRev=rev;lastJSON=JSON.stringify(state);window.mabelisSetState(state,rev);ready=true;showLock()}finally{applying=false}}
  // Existing global `let S` is a global lexical binding, not window.S. Use a controlled bridge installed below.
  window.MABELIS_ONLINE={afterRemote:rev=>{},save:state=>{if(applying||!ready||pending||!room||!user||localUidOrder[JSON.parse(lastJSON).turn]!==user.uid)return;const json=JSON.stringify(state);if(json===lastJSON)return;pending=true;runTransaction(db,async tx=>{const snap=await tx.get(gameRef);if(!snap.exists()||snap.data().revision!==remoteRev)throw Error('A partida mudou em outro aparelho.');if(snap.data().turnUid!==user.uid)throw Error('Não é seu turno.');tx.update(gameRef,{state:JSON.parse(json),revision:remoteRev+1,turnUid:localUidOrder[state.turn],updatedAt:serverTimestamp()})}).catch(e=>{notice('Jogada não sincronizada: '+e.message+' Atualize a página.');ready=false}).finally(()=>pending=false)},getRoom:()=>room};
